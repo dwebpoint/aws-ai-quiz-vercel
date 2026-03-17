@@ -154,7 +154,7 @@ export default function Home() {
 
           <div className="stats-bar">
             <div className="stat">
-              <span className="stat-value">80</span>
+              <span className="stat-value">150</span>
               <span className="stat-label">Questions</span>
             </div>
             <div className="stat">
@@ -174,7 +174,7 @@ export default function Home() {
               onChange={(e) => setSelectedDomain(e.target.value)}
               className="select"
             >
-              <option value="all">All Domains (80 Questions)</option>
+              <option value="all">All Domains (150 Questions)</option>
               {domains.map(d => (
                 <option key={d.id} value={d.name}>
                   {d.name} ({d.weight})
@@ -186,7 +186,7 @@ export default function Home() {
           <div className="card">
             <h2>Number of Questions</h2>
             <div className="quiz-size-options">
-              {[10, 20, 40, 65, 80].map(size => (
+              {[10, 20, 40, 65, 100, 150].map(size => (
                 <button
                   key={size}
                   className={`size-btn ${quizSize === size ? 'active' : ''}`}
