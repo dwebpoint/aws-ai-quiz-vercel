@@ -97,6 +97,8 @@ export default function Home() {
     } else {
       setSelectedAnswers([index]);
       if (mode === 'review') {
+        // Auto-save answer in practice mode for single-answer questions
+        setAnswers(prev => ({ ...prev, [currentQuestion]: index }));
         setShowExplanation(true);
       }
     }
@@ -121,10 +123,11 @@ export default function Home() {
       const savedAnswer = answers[nextIdx];
       if (savedAnswer !== undefined) {
         setSelectedAnswers(Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer]);
+        setShowExplanation(mode === 'review');
       } else {
         setSelectedAnswers([]);
+        setShowExplanation(false);
       }
-      setShowExplanation(mode === 'review' && answers[nextIdx] !== undefined);
     }
   };
 
@@ -135,10 +138,11 @@ export default function Home() {
       const savedAnswer = answers[prevIdx];
       if (savedAnswer !== undefined) {
         setSelectedAnswers(Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer]);
+        setShowExplanation(mode === 'review');
       } else {
         setSelectedAnswers([]);
+        setShowExplanation(false);
       }
-      setShowExplanation(mode === 'review' && answers[prevIdx] !== undefined);
     }
   };
 
