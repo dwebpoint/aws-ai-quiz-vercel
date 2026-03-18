@@ -3,9 +3,9 @@ import Head from 'next/head';
 import { questions, domains } from '../data/questions';
 
 export default function Home() {
-  const [mode, setMode] = useState('home'); // home, quiz, review, results
+  const [mode, setMode] = useState('home');
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [selectedAnswers, setSelectedAnswers] = useState([]);
   const [showExplanation, setShowExplanation] = useState(false);
   const [answers, setAnswers] = useState({});
   const [quizQuestions, setQuizQuestions] = useState([]);
@@ -14,7 +14,6 @@ export default function Home() {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [quizStartTime, setQuizStartTime] = useState(null);
 
-  // Timer effect
   useEffect(() => {
     let timer;
     if (mode === 'quiz' && timeRemaining > 0) {
@@ -50,11 +49,10 @@ export default function Home() {
     setQuizQuestions(shuffled);
     setCurrentQuestion(0);
     setAnswers({});
-    setSelectedAnswer(null);
+    setSelectedAnswers([]);
     setShowExplanation(false);
     setMode('quiz');
     setQuizStartTime(Date.now());
-    // 1.5 minutes per question
     setTimeRemaining(quizSize * 90);
   };
 
@@ -67,22 +65,50 @@ export default function Home() {
     setQuizQuestions(shuffled);
     setCurrentQuestion(0);
     setAnswers({});
-    setSelectedAnswer(null);
+    setSelectedAnswers([]);
     setShowExplanation(false);
     setMode('review');
     setTimeRemaining(null);
   };
 
+  const isMultiAnswer = (q) => Array.isArray(q.correctAnswer);
+  
+  const getRequiredSelections = (q) => {
+    if (!isMultiAnswer(q)) return 1;
+    return q.correctAnswer.length;
+  };
+
   const handleAnswer = (index) => {
+    const q = quizQuestions[currentQuestion];
     if (mode === 'quiz' && answers[currentQuestion] !== undefined) return;
-    setSelectedAnswer(index);
-    if (mode === 'review') {
-      setShowExplanation(true);
+    
+    if (isMultiAnswer(q)) {
+      setSelectedAnswers(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        } else {
+          const maxSelections = getRequiredSelections(q);
+          if (prev.length >= maxSelections) {
+            return [...prev.slice(1), index];
+          }
+          return [...prev, index];
+        }
+      });
+    } else {
+      setSelectedAnswers([index]);
+      if (mode === 'review') {
+        setShowExplanation(true);
+      }
     }
   };
 
   const submitAnswer = () => {
-    setAnswers({ ...answers, [currentQuestion]: selectedAnswer });
+    const q = quizQuestions[currentQuestion];
+    if (isMultiAnswer(q)) {
+      setAnswers({ ...answers, [currentQuestion]: [...selectedAnswers].sort() });
+    } else {
+      setAnswers({ ...answers, [currentQuestion]: selectedAnswers[0] });
+    }
     if (mode === 'review') {
       setShowExplanation(true);
     }
@@ -90,17 +116,29 @@ export default function Home() {
 
   const nextQuestion = () => {
     if (currentQuestion < quizQuestions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
-      setSelectedAnswer(answers[currentQuestion + 1] ?? null);
-      setShowExplanation(mode === 'review' && answers[currentQuestion + 1] !== undefined);
+      const nextIdx = currentQuestion + 1;
+      setCurrentQuestion(nextIdx);
+      const savedAnswer = answers[nextIdx];
+      if (savedAnswer !== undefined) {
+        setSelectedAnswers(Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer]);
+      } else {
+        setSelectedAnswers([]);
+      }
+      setShowExplanation(mode === 'review' && answers[nextIdx] !== undefined);
     }
   };
 
   const prevQuestion = () => {
     if (currentQuestion > 0) {
-      setCurrentQuestion(currentQuestion - 1);
-      setSelectedAnswer(answers[currentQuestion - 1] ?? null);
-      setShowExplanation(mode === 'review' && answers[currentQuestion - 1] !== undefined);
+      const prevIdx = currentQuestion - 1;
+      setCurrentQuestion(prevIdx);
+      const savedAnswer = answers[prevIdx];
+      if (savedAnswer !== undefined) {
+        setSelectedAnswers(Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer]);
+      } else {
+        setSelectedAnswers([]);
+      }
+      setShowExplanation(mode === 'review' && answers[prevIdx] !== undefined);
     }
   };
 
@@ -108,10 +146,20 @@ export default function Home() {
     setMode('results');
   };
 
+  const isAnswerCorrect = (q, userAnswer) => {
+    if (isMultiAnswer(q)) {
+      if (!Array.isArray(userAnswer)) return false;
+      const correct = [...q.correctAnswer].sort();
+      const user = [...userAnswer].sort();
+      return correct.length === user.length && correct.every((v, i) => v === user[i]);
+    }
+    return userAnswer === q.correctAnswer;
+  };
+
   const calculateScore = () => {
     let correct = 0;
     quizQuestions.forEach((q, idx) => {
-      if (answers[idx] === q.correctAnswer) correct++;
+      if (isAnswerCorrect(q, answers[idx])) correct++;
     });
     return correct;
   };
@@ -129,7 +177,7 @@ export default function Home() {
         domainScores[q.domain] = { correct: 0, total: 0 };
       }
       domainScores[q.domain].total++;
-      if (answers[idx] === q.correctAnswer) {
+      if (isAnswerCorrect(q, answers[idx])) {
         domainScores[q.domain].correct++;
       }
     });
@@ -154,7 +202,7 @@ export default function Home() {
 
           <div className="stats-bar">
             <div className="stat">
-              <span className="stat-value">150</span>
+              <span className="stat-value">175</span>
               <span className="stat-label">Questions</span>
             </div>
             <div className="stat">
@@ -174,7 +222,7 @@ export default function Home() {
               onChange={(e) => setSelectedDomain(e.target.value)}
               className="select"
             >
-              <option value="all">All Domains (150 Questions)</option>
+              <option value="all">All Domains (175 Questions)</option>
               {domains.map(d => (
                 <option key={d.id} value={d.name}>
                   {d.name} ({d.weight})
@@ -186,7 +234,7 @@ export default function Home() {
           <div className="card">
             <h2>Number of Questions</h2>
             <div className="quiz-size-options">
-              {[10, 20, 40, 65, 100, 150].map(size => (
+              {[10, 20, 40, 65, 100, 175].map(size => (
                 <button
                   key={size}
                   className={`size-btn ${quizSize === size ? 'active' : ''}`}
@@ -230,7 +278,14 @@ export default function Home() {
   if (mode === 'quiz' || mode === 'review') {
     const q = quizQuestions[currentQuestion];
     const answered = answers[currentQuestion] !== undefined;
-    const isCorrect = answered && answers[currentQuestion] === q.correctAnswer;
+    const isMulti = isMultiAnswer(q);
+    const requiredSelections = getRequiredSelections(q);
+    
+    // For checking correctness, use saved answer if exists, otherwise use current selection
+    const currentAnswer = answered 
+      ? answers[currentQuestion] 
+      : (isMulti ? [...selectedAnswers].sort() : selectedAnswers[0]);
+    const isCorrect = (answered || (showExplanation && selectedAnswers.length > 0)) && isAnswerCorrect(q, currentAnswer);
 
     return (
       <>
@@ -261,7 +316,14 @@ export default function Home() {
             />
           </div>
 
-          <div className="domain-tag">{q.domain}</div>
+          <div className="tags-row">
+            <div className="domain-tag">{q.domain}</div>
+            {isMulti && (
+              <div className="multi-answer-badge">
+                Select {requiredSelections} ({selectedAnswers.length}/{requiredSelections})
+              </div>
+            )}
+          </div>
 
           <div className="question-card">
             <p className="question-text">{q.question}</p>
@@ -270,10 +332,16 @@ export default function Home() {
           <div className="options-list">
             {q.options.map((option, idx) => {
               let optionClass = 'option';
-              if (selectedAnswer === idx) optionClass += ' selected';
-              if (showExplanation || (mode === 'results')) {
-                if (idx === q.correctAnswer) optionClass += ' correct';
-                else if (selectedAnswer === idx && idx !== q.correctAnswer) optionClass += ' incorrect';
+              const isSelected = selectedAnswers.includes(idx);
+              if (isSelected) optionClass += ' selected';
+              
+              if (showExplanation || mode === 'results') {
+                const correctAnswers = isMulti ? q.correctAnswer : [q.correctAnswer];
+                if (correctAnswers.includes(idx)) {
+                  optionClass += ' correct';
+                } else if (isSelected) {
+                  optionClass += ' incorrect';
+                }
               }
               
               return (
@@ -283,18 +351,27 @@ export default function Home() {
                   onClick={() => handleAnswer(idx)}
                   disabled={mode === 'quiz' && answered}
                 >
-                  <span className="option-letter">{String.fromCharCode(65 + idx)}</span>
+                  <span className={`option-letter ${isMulti ? 'checkbox' : ''}`}>
+                    {isMulti ? (isSelected ? '☑' : '☐') : String.fromCharCode(65 + idx)}
+                  </span>
                   <span className="option-text">{option}</span>
-                  {showExplanation && idx === q.correctAnswer && <span className="check">✓</span>}
+                  {showExplanation && (isMulti ? q.correctAnswer : [q.correctAnswer]).includes(idx) && (
+                    <span className="check">✓</span>
+                  )}
                 </button>
               );
             })}
           </div>
 
           {showExplanation && (
-            <div className="explanation">
+            <div className={`explanation ${isCorrect ? 'correct' : 'incorrect'}`}>
               <h4>{isCorrect ? '✅ Correct!' : '❌ Incorrect'}</h4>
               <p>{q.explanation}</p>
+              {isMulti && (
+                <p className="correct-answers">
+                  <strong>Correct answers:</strong> {q.correctAnswer.map(i => String.fromCharCode(65 + i)).join(', ')}
+                </p>
+              )}
             </div>
           )}
 
@@ -307,7 +384,7 @@ export default function Home() {
               ← Prev
             </button>
             
-            {!answered && selectedAnswer !== null && (
+            {!answered && selectedAnswers.length >= requiredSelections && (
               <button className="nav-btn submit-btn" onClick={submitAnswer}>
                 Submit
               </button>
@@ -335,6 +412,8 @@ export default function Home() {
     const percentage = Math.round((score / quizQuestions.length) * 100);
     const passed = percentage >= 70;
     const domainScores = getScoreByDomain();
+    const circumference = 2 * Math.PI * 80;
+    const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
 
     return (
       <>
@@ -345,17 +424,17 @@ export default function Home() {
         <div className="container">
           <div className={`results-header ${passed ? 'passed' : 'failed'}`}>
             <div className="result-icon">{passed ? '🎉' : '📚'}</div>
-            <h1>{passed ? 'Congratulations!' : 'Keep Practicing!'}</h1>
-            <p>{passed ? 'You passed the practice exam!' : 'You need 70% to pass. Review and try again!'}</p>
+            <h2>{passed ? 'Congratulations!' : 'Keep Learning!'}</h2>
+            <p>{passed ? 'You passed the practice exam!' : 'Review the material and try again.'}</p>
           </div>
 
           <div className="score-circle">
-            <svg viewBox="0 0 100 100">
-              <circle className="bg" cx="50" cy="50" r="45" />
+            <svg width="180" height="180">
+              <circle className="bg" cx="90" cy="90" r="80" />
               <circle 
                 className={`progress ${passed ? 'passed' : 'failed'}`}
-                cx="50" cy="50" r="45"
-                strokeDasharray={`${percentage * 2.83} 283`}
+                cx="90" cy="90" r="80"
+                strokeDasharray={strokeDasharray}
               />
             </svg>
             <div className="score-text">
@@ -366,37 +445,43 @@ export default function Home() {
 
           <div className="domain-scores">
             <h3>Score by Domain</h3>
-            {Object.entries(domainScores).map(([domain, data]) => (
-              <div key={domain} className="domain-score-item">
-                <div className="domain-score-header">
-                  <span className="domain-score-name">{domain.replace('Domain ', 'D').split(':')[0]}</span>
-                  <span className="domain-score-value">
-                    {data.correct}/{data.total} ({Math.round((data.correct/data.total)*100)}%)
-                  </span>
+            {Object.entries(domainScores).map(([domain, data]) => {
+              const pct = Math.round((data.correct / data.total) * 100);
+              return (
+                <div key={domain} className="domain-score-item">
+                  <div className="domain-score-header">
+                    <span className="domain-score-name">{domain.replace('Domain ', 'D').split(':')[0]}</span>
+                    <span className="domain-score-value">{data.correct}/{data.total} ({pct}%)</span>
+                  </div>
+                  <div className="domain-score-bar">
+                    <div 
+                      className="domain-score-fill"
+                      style={{ 
+                        width: `${pct}%`,
+                        background: pct >= 70 ? '#10b981' : '#ef4444'
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="domain-score-bar">
-                  <div 
-                    className="domain-score-fill"
-                    style={{ 
-                      width: `${(data.correct/data.total)*100}%`,
-                      backgroundColor: (data.correct/data.total) >= 0.7 ? '#10b981' : '#ef4444'
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="button-group">
-            <button className="btn btn-primary" onClick={() => {
+            <button className="btn btn-secondary" onClick={() => {
               setMode('review');
               setCurrentQuestion(0);
-              setSelectedAnswer(answers[0] ?? null);
+              const savedAnswer = answers[0];
+              if (savedAnswer !== undefined) {
+                setSelectedAnswers(Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer]);
+              } else {
+                setSelectedAnswers([]);
+              }
               setShowExplanation(true);
             }}>
               📝 Review Answers
             </button>
-            <button className="btn btn-secondary" onClick={() => setMode('home')}>
+            <button className="btn btn-primary" onClick={() => setMode('home')}>
               🏠 Back to Home
             </button>
           </div>
@@ -418,10 +503,15 @@ const styles = `
 
   .container {
     min-height: 100vh;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
     color: white;
     padding: 20px;
+    padding-bottom: 100px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .quiz-container {
+    padding-bottom: 120px;
   }
 
   .header {
@@ -431,17 +521,17 @@ const styles = `
 
   .aws-badge {
     display: inline-block;
-    background: linear-gradient(135deg, #ff9900 0%, #ffb84d 100%);
+    background: #ff9900;
     color: #232f3e;
-    padding: 8px 20px;
-    border-radius: 20px;
-    font-weight: bold;
+    font-weight: 800;
     font-size: 14px;
+    padding: 6px 14px;
+    border-radius: 4px;
     margin-bottom: 15px;
   }
 
   h1 {
-    font-size: 28px;
+    font-size: 32px;
     font-weight: 700;
     margin-bottom: 5px;
   }
@@ -457,7 +547,7 @@ const styles = `
     background: rgba(255,255,255,0.05);
     border-radius: 16px;
     padding: 20px;
-    margin: 20px 0;
+    margin-bottom: 25px;
   }
 
   .stat {
@@ -466,38 +556,46 @@ const styles = `
 
   .stat-value {
     display: block;
-    font-size: 24px;
-    font-weight: bold;
+    font-size: 28px;
+    font-weight: 700;
     color: #ff9900;
   }
 
   .stat-label {
     font-size: 12px;
     color: #94a3b8;
+    text-transform: uppercase;
   }
 
   .card {
     background: rgba(255,255,255,0.05);
     border-radius: 16px;
     padding: 20px;
-    margin-bottom: 15px;
+    margin-bottom: 20px;
   }
 
   .card h2 {
-    font-size: 16px;
+    font-size: 14px;
+    color: #94a3b8;
     margin-bottom: 15px;
-    color: #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .select {
     width: 100%;
     padding: 15px;
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 2px solid rgba(255,255,255,0.1);
     background: rgba(255,255,255,0.05);
     color: white;
     font-size: 16px;
     cursor: pointer;
+  }
+
+  .select option {
+    background: #1e293b;
+    color: white;
   }
 
   .quiz-size-options {
@@ -508,13 +606,14 @@ const styles = `
 
   .size-btn {
     flex: 1;
-    min-width: 50px;
-    padding: 12px;
-    border: 1px solid rgba(255,255,255,0.2);
+    min-width: 60px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 2px solid rgba(255,255,255,0.1);
     background: transparent;
     color: white;
-    border-radius: 10px;
     font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
   }
@@ -523,27 +622,27 @@ const styles = `
     background: #ff9900;
     border-color: #ff9900;
     color: #232f3e;
-    font-weight: bold;
   }
 
   .button-group {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin: 25px 0;
+    margin-bottom: 30px;
   }
 
   .btn {
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 5px;
     padding: 20px;
     border-radius: 16px;
     border: none;
     font-size: 18px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s;
   }
 
   .btn:active {
@@ -551,43 +650,52 @@ const styles = `
   }
 
   .btn-primary {
-    background: linear-gradient(135deg, #ff9900 0%, #ffb84d 100%);
+    background: linear-gradient(135deg, #ff9900 0%, #ffad33 100%);
     color: #232f3e;
   }
 
   .btn-secondary {
     background: rgba(255,255,255,0.1);
     color: white;
-    border: 1px solid rgba(255,255,255,0.2);
   }
 
   .btn-icon {
     font-size: 24px;
-    margin-bottom: 5px;
   }
 
   .btn-desc {
-    font-size: 12px;
-    font-weight: normal;
+    font-size: 13px;
+    font-weight: 400;
     opacity: 0.8;
   }
 
   .domains-list {
-    margin-top: 30px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 16px;
+    padding: 20px;
   }
 
   .domains-list h3 {
     font-size: 14px;
     color: #94a3b8;
     margin-bottom: 15px;
+    text-transform: uppercase;
   }
 
   .domain-item {
     display: flex;
     justify-content: space-between;
     padding: 12px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     font-size: 14px;
+  }
+
+  .domain-item:last-child {
+    border-bottom: none;
+  }
+
+  .domain-name {
+    color: #e2e8f0;
   }
 
   .domain-weight {
@@ -595,11 +703,7 @@ const styles = `
     font-weight: 600;
   }
 
-  /* Quiz Styles */
-  .quiz-container {
-    padding-bottom: 100px;
-  }
-
+  /* Quiz Screen */
   .quiz-header {
     display: flex;
     justify-content: space-between;
@@ -622,6 +726,7 @@ const styles = `
     display: flex;
     gap: 15px;
     font-size: 14px;
+    color: #e2e8f0;
   }
 
   .timer {
@@ -658,6 +763,13 @@ const styles = `
     transition: width 0.3s ease;
   }
 
+  .tags-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+  }
+
   .domain-tag {
     display: inline-block;
     font-size: 11px;
@@ -665,7 +777,16 @@ const styles = `
     background: rgba(255,153,0,0.2);
     color: #ff9900;
     border-radius: 20px;
-    margin-bottom: 15px;
+  }
+
+  .multi-answer-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 5px 12px;
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border-radius: 20px;
+    font-weight: 600;
   }
 
   .question-card {
@@ -733,6 +854,11 @@ const styles = `
     flex-shrink: 0;
   }
 
+  .option-letter.checkbox {
+    border-radius: 6px;
+    font-size: 18px;
+  }
+
   .option.selected .option-letter {
     background: #ff9900;
     color: #232f3e;
@@ -764,6 +890,11 @@ const styles = `
     margin-top: 20px;
   }
 
+  .explanation.incorrect {
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.3);
+  }
+
   .explanation h4 {
     margin-bottom: 10px;
     font-size: 16px;
@@ -773,6 +904,13 @@ const styles = `
     font-size: 14px;
     line-height: 1.6;
     color: #e2e8f0;
+  }
+
+  .correct-answers {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    color: #10b981;
   }
 
   .quiz-nav {
